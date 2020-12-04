@@ -39,6 +39,26 @@ GLOBAL OPTIONS:
    --help, -h                  show help (default: false)
 ```
 
+## How to build
+
+### linux
+
+```bash
+env GOOS=linux GOARCH=amd64 go build
+```
+
+### macos
+
+```bash
+env GOOS=darwin GOARCH=amd64 go build
+```
+
+### windows
+
+```bash
+env GOOS=windows GOARCH=amd64 go build
+```
+
 ## How?
 
 As you know, dndbeyond doesn't provide any API whatsoever. This program basically use headless chrome render the character sheet, and use queryselector to get information.
