@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 
 	"github.com/chromedp/chromedp"
@@ -43,6 +44,7 @@ type CharacterAPIPayloadCampaignCharacter struct {
 var (
 	charList = make(map[string]*Character)
 	dataChan = make(chan [][]string)
+	charID   string
 )
 
 const (
@@ -51,6 +53,8 @@ const (
 )
 
 func main() {
+	charID = os.Args[1]
+
 	writer := uilive.New()
 	writer.Start()
 
@@ -62,6 +66,8 @@ func main() {
 	go start()
 	for {
 		data := <-dataChan
+		sortByName(data)
+		writer.Flush()
 		render(data, writer)
 	}
 }
@@ -77,9 +83,9 @@ func render(data [][]string, writer io.Writer) {
 }
 
 func start() {
-	charID := os.Args[1]
 	char := Character{ID: charID}
 	charList[charID] = &char
+	ctx, cancel := chromedp.NewContext(context.Background())
 
 	charPayload, err := getCharAPI(&char)
 	if err != nil {
@@ -97,12 +103,13 @@ func start() {
 
 	for i := range charList {
 		v := charList[i]
-		err := getInfoFromBrowser(v)
+		err := getInfoFromBrowser(ctx, v)
 		if err != nil {
 			log.Fatalln(err)
 		}
 		data = append(data, []string{v.Name, v.CurHP, v.MaxHP})
 	}
+	defer cancel()
 	dataChan <- data
 }
 
@@ -124,9 +131,7 @@ func getCharAPI(char *Character) (charPayload *CharacterAPIPayload, err error) {
 	return
 }
 
-func getInfoFromBrowser(char *Character) (err error) {
-	ctx, cancel := chromedp.NewContext(context.Background())
-	defer cancel()
+func getInfoFromBrowser(ctx context.Context, char *Character) (err error) {
 	err = chromedp.Run(ctx,
 		chromedp.Emulate(device.IPhone7landscape),
 		chromedp.Navigate(characterPageURL+char.ID),
@@ -134,4 +139,10 @@ func getInfoFromBrowser(char *Character) (err error) {
 		chromedp.Text(`.ct-status-summary-mobile__hp-max`, &char.MaxHP, chromedp.NodeVisible, chromedp.ByQuery),
 	)
 	return
+}
+
+func sortByName(ls [][]string) {
+	sort.Slice(ls, func(i, j int) bool {
+		return ls[i][0] < ls[j][0]
+	})
 }
