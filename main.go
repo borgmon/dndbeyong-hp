@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/device"
@@ -86,6 +87,7 @@ func start() {
 	char := Character{ID: charID}
 	charList[charID] = &char
 	ctx, cancel := chromedp.NewContext(context.Background())
+	browserChan := make(chan func() (*Character, error))
 
 	charPayload, err := getCharAPI(&char)
 	if err != nil {
@@ -101,14 +103,20 @@ func start() {
 
 	var data [][]string
 
-	for i := range charList {
-		v := charList[i]
-		err := getInfoFromBrowser(ctx, v)
+	for k := range charList {
+		v := charList[k]
+		go getInfoFromBrowser(ctx, v, browserChan)
+	}
+
+	for i := 0; i < len(charList); i++ {
+		char, err := (<-browserChan)()
 		if err != nil {
 			log.Fatalln(err)
 		}
-		data = append(data, []string{v.Name, v.CurHP, v.MaxHP})
+		charList[char.ID] = char
+		data = append(data, []string{char.Name, char.CurHP, char.MaxHP})
 	}
+
 	defer cancel()
 	dataChan <- data
 }
@@ -131,14 +139,17 @@ func getCharAPI(char *Character) (charPayload *CharacterAPIPayload, err error) {
 	return
 }
 
-func getInfoFromBrowser(ctx context.Context, char *Character) (err error) {
-	err = chromedp.Run(ctx,
+func getInfoFromBrowser(ctx context.Context, char *Character, ch chan func() (*Character, error)) {
+	ctx, cancel := chromedp.NewContext(ctx)
+	ctx, cancel = context.WithTimeout(ctx, 15*time.Second)
+	err := chromedp.Run(ctx,
 		chromedp.Emulate(device.IPhone7landscape),
 		chromedp.Navigate(characterPageURL+char.ID),
 		chromedp.Text(`.ct-status-summary-mobile__hp-current`, &char.CurHP, chromedp.NodeVisible, chromedp.ByQuery),
 		chromedp.Text(`.ct-status-summary-mobile__hp-max`, &char.MaxHP, chromedp.NodeVisible, chromedp.ByQuery),
 	)
-	return
+	defer cancel()
+	ch <- (func() (*Character, error) { return char, err })
 }
 
 func sortByName(ls [][]string) {
