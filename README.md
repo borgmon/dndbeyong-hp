@@ -2,6 +2,8 @@
 
 Get your characters hp from dndbeyond!
 
+![screenshot](screenshot.png)
+
 ## Download
 
 Download from release page.
