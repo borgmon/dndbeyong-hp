@@ -8,4 +8,5 @@ require (
 	github.com/mattn/go-isatty v0.0.12 // indirect
 	github.com/olekukonko/tablewriter v0.0.4
 	github.com/robfig/cron v1.2.0
+	github.com/urfave/cli/v2 v2.3.0
 )

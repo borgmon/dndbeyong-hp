@@ -1,15 +1,20 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/urfave/cli/v2"
 
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/device"
@@ -43,9 +48,11 @@ type CharacterAPIPayloadCampaignCharacter struct {
 }
 
 var (
-	charList = make(map[string]*Character)
-	dataChan = make(chan [][]string)
-	charID   string
+	charList     = make(map[string]*Character)
+	dataChan     = make(chan [][]string)
+	charID       string
+	interval     string
+	campaignName string
 )
 
 const (
@@ -54,14 +61,35 @@ const (
 )
 
 func main() {
-	charID = os.Args[1]
+	cliApp := getCLI()
+	err := cliApp.Run(os.Args)
+	if err != nil {
+		log.Fatalln(err)
+	}
 
 	writer := uilive.New()
 	writer.Start()
 
+	if len(os.Args) > 1 && strings.Contains(os.Args[1], "h") {
+		return
+	}
+
+	if charID == "" {
+		scanner := bufio.NewScanner(os.Stdin)
+		fmt.Fprint(writer, "What is your character ID: ")
+		scanner.Scan()
+		charID = scanner.Text()
+		fmt.Fprintln(writer)
+	}
+
+	_, err = strconv.Atoi(charID)
+	if err != nil {
+		log.Fatalln("Invalid Character ID")
+	}
+
 	cronJob := cron.New()
 	cronJob.Start()
-	cronJob.AddFunc("@every 30s", func() {
+	cronJob.AddFunc(interval, func() {
 		go start()
 	})
 	go start()
@@ -73,13 +101,41 @@ func main() {
 	}
 }
 
+func getCLI() *cli.App {
+	app := &cli.App{
+		Name:                 "dndbeyond-hp",
+		Usage:                "Get your characters hp from dndbeyond! Please set all characters to public.",
+		UsageText:            "{Character ID} - Your dndbeyond character id",
+		EnableBashCompletion: true,
+		HideHelpCommand:      true,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:        "interval",
+				Aliases:     []string{"i"},
+				Value:       "@every 1m",
+				Usage:       "Set refresh interval. Not recommend to set lower as dndbeyond has DDOS protection. Example: https://godoc.org/github.com/robfig/cron",
+				Destination: &interval,
+			},
+		},
+		Action: func(c *cli.Context) error {
+			_, err := cron.ParseStandard(interval)
+			if err != nil {
+				return err
+			}
+			if c.NArg() > 0 {
+				charID = c.Args().Get(0)
+			}
+			return nil
+		},
+	}
+	return app
+}
+
 func render(data [][]string, writer io.Writer) {
 	table := tablewriter.NewWriter(writer)
 	table.SetHeader([]string{"Name", "CurrentHP", "MaxHP"})
-
-	for _, v := range data {
-		table.Append(v)
-	}
+	table.SetFooter([]string{"Campaign Name", "", campaignName})
+	table.AppendBulk(data)
 	table.Render()
 }
 
@@ -93,6 +149,8 @@ func start() {
 	if err != nil {
 		log.Fatalln(err)
 	}
+
+	campaignName = charPayload.Data.Campaign.Name
 
 	for i := range charPayload.Data.Campaign.Characters {
 		v := charPayload.Data.Campaign.Characters[i]
