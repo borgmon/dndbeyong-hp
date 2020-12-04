@@ -6,7 +6,7 @@ Get your characters hp from dndbeyond!
 
 ## Download
 
-Download from release page.
+Download from ![release](https://github.com/borgmon/dndbeyong-hp/releases) page.
 
 THIS PROGRAM REQUIRE CHROME INSTALLED.
 
